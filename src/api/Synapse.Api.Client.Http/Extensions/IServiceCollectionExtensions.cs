@@ -34,6 +34,12 @@ public static class IServiceCollectionExtensions
         services.AddHttpClient<ISynapseApiClient, SynapseHttpApiClient>((provider, http) =>
         {
             var apiClientOptions = provider.GetRequiredService<IOptions<SynapseHttpApiClientOptions>>().Value;
+
+            Console.WriteLine($"[DEBUG] BaseAddress from config: {apiClientOptions.BaseAddress}");
+
+            if (apiClientOptions.BaseAddress == null)
+                throw new ArgumentNullException("BaseAddress is null. Check ~/.config/synctl/config.yaml");
+
             http.BaseAddress = apiClientOptions.BaseAddress;
         });
         services.TryAddSingleton(provider =>

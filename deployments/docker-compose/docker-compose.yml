@@ -1,61 +1,55 @@
 services:
-
   garnet:
     image: ghcr.io/microsoft/garnet
     volumes:
       - garnet_data:/data
- 
+
   api:
-    image: ghcr.io/serverlessworkflow/synapse/api
+    image: ghcr.io/serverlessworkflow/synapse/api:1.0.0-alpha5.14
+    ports:
+      - 8080:8080
+    volumes:
+      - ./config/tokens.yaml:/app/tokens.yaml
     environment:
-      CONNECTIONSTRINGS__REDIS: ${GARNET_URI}
+      CONNECTIONSTRINGS__REDIS: garnet:6379
       SYNAPSE_DASHBOARD_SERVE: 'true'
       SYNAPSE_API_AUTH_TOKEN_FILE: /app/tokens.yaml
       SYNAPSE_API_JWT_AUTHORITY: http://api:8080
-      SYNAPSE_API_CLOUD_EVENTS_ENDPOINT: https://webhook.site/a4aff725-0711-48b2-a9d2-5d1b806d04d0
-    volumes:
-      - ./config/tokens.yaml:/app/tokens.yaml
-    ports:
-      - 8080:8080
+      SYNAPSE_API_CLOUD_EVENTS_ENDPOINT: https://webhook.site/test
+      SYNAPSE_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       - garnet
 
   operator:
-    image: ghcr.io/serverlessworkflow/synapse/operator
+    image: ghcr.io/serverlessworkflow/synapse/operator:1.0.0-alpha5.14
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      CONNECTIONSTRINGS__REDIS: ${GARNET_URI}
+      CONNECTIONSTRINGS__REDIS: garnet:6379
       SYNAPSE_OPERATOR_NAMESPACE: default
       SYNAPSE_OPERATOR_NAME: operator-1
       SYNAPSE_RUNNER_API: http://api:8080
       SYNAPSE_RUNNER_LIFECYCLE_EVENTS: 'true'
       SYNAPSE_RUNNER_CONTAINER_PLATFORM: docker
-      SYNAPSE_RUNTIME_DOCKER_SECRETS_DIRECTORY: C:\Users\User\.synapse\secrets
-      DOCKER_HOST: unix:///var/run/docker.sock
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     user: root
     depends_on:
       - garnet
 
   correlator:
-    image: ghcr.io/serverlessworkflow/synapse/correlator
-    environment:
-      CONNECTIONSTRINGS__REDIS: ${GARNET_URI}
-      SYNAPSE_CORRELATOR_NAMESPACE: default
-      SYNAPSE_CORRELATOR_NAME: correlator-1
+    image: ghcr.io/serverlessworkflow/synapse/correlator:1.0.0-alpha5.14
     ports:
       - 8081:8080
+    environment:
+      CONNECTIONSTRINGS__REDIS: garnet:6379
+      SYNAPSE_CORRELATOR_NAMESPACE: default
+      SYNAPSE_CORRELATOR_NAME: correlator-1
     depends_on:
       - garnet
 
-volumes:
-
-  garnet_data:
-    driver: local
-
 networks:
-
   default:
     name: synapse
+
+volumes:
+  garnet_data:
+

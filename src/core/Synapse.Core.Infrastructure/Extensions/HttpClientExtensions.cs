@@ -35,7 +35,9 @@ public static class HttpClientExtensions
         ArgumentNullException.ThrowIfNull(serviceProvider);
         if (authentication == null) return;
         var authorization = await AuthorizationInfo.CreateAsync(authentication, serviceProvider, workflow, cancellationToken).ConfigureAwait(false);
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(authorization.Scheme, authorization.Parameter);
+        httpClient.DefaultRequestHeaders.Authorization =
+    new AuthenticationHeaderValue("Bearer", Environment.GetEnvironmentVariable("SYNAPSE_API_AUTH_TOKEN"));
+
     }
 
 }

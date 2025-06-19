@@ -56,7 +56,24 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
         if (string.IsNullOrWhiteSpace(applicationOptions.Api.Current)) return;
         var apiConfiguration = applicationOptions.Api.Configurations[applicationOptions.Api.Current];
         http.BaseAddress = apiConfiguration.Server;
-        http.TokenFactory = provider => Task.FromResult(apiConfiguration.Token)!;
+        http.TokenFactory = provider =>
+        {
+            var envToken = Environment.GetEnvironmentVariable("SYNAPSE_API_AUTH_TOKEN");
+            if (!string.IsNullOrWhiteSpace(envToken))
+            {
+                Console.WriteLine($"🔑 Using token from ENV: {envToken}");
+                return Task.FromResult(envToken)!;
+            }
+
+            if (!string.IsNullOrWhiteSpace(apiConfiguration.Token))
+            {
+                Console.WriteLine($"🔑 Using token from config: {apiConfiguration.Token}");
+                return Task.FromResult(apiConfiguration.Token)!;
+            }
+
+            Console.WriteLine("❌ No token found.");
+            return Task.FromResult<string?>(null)!;
+        };
     });
     services.AddCliCommands();
     services.AddSingleton<IOptionsManager, OptionsManager>();
