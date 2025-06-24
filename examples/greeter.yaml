@@ -1,0 +1,18 @@
+apiVersion: core.synapse.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: greeter
+  namespace: default
+spec:
+  versions:
+    - name: v1
+      document:
+        dsl: '1.0.0-alpha5'
+        name: greeter
+        version: '0.1.0'
+        namespace: default
+        do:
+          name: greet
+          type: set
+          parameters:
+            greeting: "'Hello, World!'"

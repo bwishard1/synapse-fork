@@ -1,0 +1,22 @@
+id: kafka-greeter
+name: Kafka Greeter
+version: '1.0'
+specVersion: '0.8'
+start: greet
+events:
+  - name: greet-incoming
+    type: my.kafka.topic
+    source: kafka
+functions:
+  - name: print
+    type: expression
+    operation: "CloudEvent -> 'Hello, ' + CloudEvent.data.name"
+states:
+  - name: greet
+    type: event
+    onEvents:
+      - eventRefs:  
+          - greet-incoming
+        actions:
+          - functionRef:
+              refName: print
