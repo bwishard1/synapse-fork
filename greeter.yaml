@@ -1,0 +1,9 @@
+document:
+  dsl: '1.0.0'
+  name: greeter
+  namespace: default
+  version: '0.1.0'
+  do:
+    greet:
+      set:
+        greetings: '${ "Hello \(.user.firstName) \(.user.lastName)!" }'

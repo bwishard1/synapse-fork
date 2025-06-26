@@ -45,11 +45,29 @@ Testing Synapse + Keycloak integration for both:
 
 ```bash
 cd deployments/docker-compose
+docker compose -f docker-compose.build.yml up -d
+
+# Ensure running
+docker compose -f docker-compose.build.yml ps
+
+# Create the workflow
+curl -X POST http://localhost:8080/api/v1/workflows \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer h0v0fixhkg9z4bgtxele7892x9sjtw7o" \
+  -d @/Users/bwishard/code/synapse/examples/greeter.json
+
+# List workflows to ensure running
+curl http://localhost:8080/api/v1/workflows \
+  -H "Authorization: Bearer h0v0fixhkg9z4bgtxele7892x9sjtw7o" | jq
+
+
+## 🧪 Quickstart Old
+cd deployments/docker-compose
 docker compose -f docker-compose.build.yml up --build
 
 # Open new terminal window
 # Token can be found in deployments/docker-compose/config/tokens.yaml
-export SYNAPSE_API_AUTH_TOKEN=<your_token>
+export SYNAPSE_API_AUTH_TOKEN=h0v0fixhkg9z4bgtxele7892x9sjtw7o
 dotnet run --project ../../src/cli/Synapse.Cli/Synapse.Cli.csproj -- workflow list
 
 # Deploy a workflow

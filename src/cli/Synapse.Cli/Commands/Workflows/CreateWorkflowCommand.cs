@@ -1,212 +1,110 @@
-﻿using System.CommandLine;
-using System.CommandLine.Invocation;
-using System.Text;
-using Newtonsoft.Json;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
-using Synapse.Api.Client;
+﻿// Copyright © 2024-Present The Synapse Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License"),
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+using Neuroglia.Data;
+using Neuroglia.Data.Infrastructure.ResourceOriented;
 using ServerlessWorkflow.Sdk.Models;
-using ServerlessWorkflow.Sdk.Models.Tasks; 
-using Neuroglia;
-using ServerlessWorkflow.Sdk; 
 
 namespace Synapse.Cli.Commands.Workflows;
 
-public class WorkflowResource
+/// <summary>
+/// Represents the <see cref="Command"/> used to create a new <see cref="Workflow"/>
+/// </summary>
+internal class CreateWorkflowCommand
+    : Command
 {
-    public string ApiVersion { get; set; }
-    public string Kind { get; set; }
-    public Metadata Metadata { get; set; }
-    public Spec Spec { get; set; }
-}
 
-public class Metadata
-{
-    public string Name { get; set; }
-    public string Namespace { get; set; }
-}
-
-public class Spec
-{
-    public List<VersionSpec> Versions { get; set; }
-}
-
-public class VersionSpec
-{
-    public string Name { get; set; }
-    public WorkflowDefinition Document { get; set; }
-}
-
-
-internal class CreateWorkflowCommand : Command
-{
+    /// <summary>
+    /// Gets the <see cref="CreateWorkflowCommand"/>'s name
+    /// </summary>
     public const string CommandName = "create";
-    public const string CommandDescription = "Creates a new workflow from a YAML definition.";
+    /// <summary>
+    /// Gets the <see cref="CreateWorkflowCommand"/>'s description
+    /// </summary>
+    public const string CommandDescription = "Creates a new workflow.";
 
-    public CreateWorkflowCommand(IServiceProvider serviceProvider, ILoggerFactory loggerFactory, ISynapseApiClient api)
+    /// <inheritdoc/>
+    public CreateWorkflowCommand(IServiceProvider serviceProvider, ILoggerFactory loggerFactory, ISynapseApiClient api, IWorkflowDefinitionReader workflowDefinitionReader)
         : base(serviceProvider, loggerFactory, api, CommandName, CommandDescription)
     {
+        this.WorkflowDefinitionReader = workflowDefinitionReader;
         this.Add(CommandOptions.File);
         this.Handler = CommandHandler.Create<string>(this.HandleAsync);
     }
 
+    /// <summary>
+    /// Gets the service used to read <see cref="WorkflowDefinition"/>s
+    /// </summary>
+    protected IWorkflowDefinitionReader WorkflowDefinitionReader { get; }
+
+    /// <summary>
+    /// Handles the <see cref="CreateWorkflowCommand"/>
+    /// </summary>
+    /// <param name="file">The path to the file that contains the definition of the workflow to create</param>
+    /// <returns>A new awaitable <see cref="Task"/></returns>
     public async Task HandleAsync(string file)
     {
-        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+        this.EnsureConfigured();
+        Stream? stream;
+        if (!string.IsNullOrWhiteSpace(file)) stream = File.OpenRead(file);
+        else throw new InvalidOperationException("You must specify exactly one of the following options: --file");
+        var workflowDefinition = await this.WorkflowDefinitionReader.ReadAsync(stream);
+        Workflow? workflow = null;
+        try { workflow = await this.Api.Workflows.GetAsync(workflowDefinition.Document.Name, workflowDefinition.Document.Namespace); }
+        catch { }
+        if (workflow == null)
         {
-            Console.WriteLine($"[ERROR] File not found: {file}");
-            return;
-        }
-
-        string yamlContent = await File.ReadAllTextAsync(file);
-
-        Console.WriteLine("📄 RAW YAML CONTENT:");
-        Console.WriteLine(yamlContent);
-
-        var deserializer = new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
-            .Build();
-
-        // Try parse outer YAML structure
-        var yamlRoot = deserializer.Deserialize<Dictionary<string, object>>(yamlContent);
-        if (!yamlRoot.TryGetValue("spec", out var specRaw) ||
-            !(specRaw is Dictionary<object, object> specDict) ||
-            !specDict.TryGetValue("versions", out var versionsRaw) ||
-            !(versionsRaw is IEnumerable<object> versionsList) ||
-            !versionsList.Cast<Dictionary<object, object>>().First().TryGetValue("document", out var documentRaw))
-        {
-            Console.WriteLine("[ERROR] Failed to find spec.versions[0].document in YAML.");
-            return;
-        }
-
-        // Extract just the nested `document:` block into a Dictionary
-        var firstVersion = versionsList
-            .Cast<Dictionary<object, object>>()
-            .First();
-
-        var documentObj = firstVersion["document"];
-
-        // Convert it back to YAML
-        var innerSerializer = new SerializerBuilder()
-            .JsonCompatible()
-            .Build();
-
-        var lines = yamlContent.Split('\n');
-        // Extract just the lines under `document:` and unindent them properly
-        var docStartIndex = Array.FindIndex(lines, l => l.TrimStart().StartsWith("document:"));
-        if (docStartIndex == -1)
-        {
-            Console.WriteLine("[ERROR] Could not find 'document:' line.");
-            return;
-        }
-
-        // Only take lines after "document:" and remove 2 leading spaces
-        var docLines = lines
-            .Skip(docStartIndex + 1)
-            .Where(line => line.StartsWith("  ")) // ensure safe unindent
-            .Select(line => line.Substring(2))   // remove exactly 2 spaces
-            .ToArray();
-
-
-        var docYaml = string.Join("\n", docLines);
-
-        Console.WriteLine("📦 DOC YAML FOR DESERIALIZATION:\n" + docYaml);
-
-
-        var wrapper = deserializer.Deserialize<WorkflowResource>(yamlContent);
-        var swf = wrapper.Spec.Versions.FirstOrDefault()?.Document;
-
-        Console.WriteLine("📄 Parsed workflow definition (swf):");
-        Console.WriteLine(JsonConvert.SerializeObject(swf, Formatting.Indented));
-
-        if (swf == null)
-        {
-            Console.WriteLine("[ERROR] WorkflowDefinition.Document is null.");
-            return;
-        }   
-
-        if (swf.Do == null || swf.Do.Count == 0)
-        {
-            swf.Do = new Map<string, TaskDefinition>
-            {
-                ["greet"] = new SetTaskDefinition
-                {
-                    Set = new EquatableDictionary<string, object>
-                    {
-                        { "greeting", "'Hello World!'" }
-                    }
-                }
+            workflow = new() 
+            { 
+                Metadata = new() 
+                { 
+                    Namespace = workflowDefinition.Document.Namespace, 
+                    Name = workflowDefinition.Document.Name
+                }, 
+                Spec = new() 
+                { 
+                    Versions = [workflowDefinition] 
+                } 
             };
-        }
-
-
-        Console.WriteLine($"✅ DSL: {swf.Document.Dsl}, Name: {swf.Document.Name}, Version: {swf.Document.Version}, Do Count: {swf.Do?.Count ?? -1}");
-
-        //var id = swf.Name ?? "unnamed-workflow";
-        var id = "unamed-workflow";
-        var version = "v1";
-       // var version = swf.Version ?? "v1";
-
-        var workflow = new
-        {
-            metadata = new
-            {
-                name = id,
-                @namespace = "default"
-            },
-            spec = new
-            {
-                versions = new[]
-                {
-                    new
-                    {
-                        name = version,
-                        document = swf
-                    }
-                }
-            }
-        };
-
-        var json = JsonConvert.SerializeObject(workflow);
-        using var http = new HttpClient();
-
-        http.BaseAddress = new Uri("http://localhost:8080");
-        var token = Environment.GetEnvironmentVariable("SYNAPSE_API_AUTH_TOKEN");
-        if (!string.IsNullOrEmpty(token))
-        {
-            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        }
-
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await http.PostAsync("/api/v1/workflows", content);
-
-        if (response.IsSuccessStatusCode)
-        {
-            Console.WriteLine($"✅ Workflow '{id}' created successfully.");
+            workflow = await this.Api.Workflows.CreateAsync(workflow);
         }
         else
         {
-            Console.WriteLine($"❌ API returned {response.StatusCode}:");
-            Console.WriteLine(await response.Content.ReadAsStringAsync());
+            var originalWorkflow = workflow.Clone()!;
+            workflow.Spec.Versions.Add(workflowDefinition);
+            var patch = JsonPatchUtility.CreateJsonPatchFromDiff(originalWorkflow, workflow);
+            workflow = await this.Api.Workflows.PatchAsync(workflowDefinition.Document.Name, workflowDefinition.Document.Namespace, new(PatchType.JsonPatch, patch));
         }
+        Console.WriteLine($"workflow/{workflow.GetName()}:{workflowDefinition.Document.Version} created");
+        await stream.DisposeAsync();
     }
-
 
     static class CommandOptions
     {
+
         public static Option<string> File
         {
             get
             {
-                return new Option<string>(
-                    aliases: new[] { "--file", "-f" },
-                    description: "Path to workflow YAML file"
-                )
+                var option = new Option<string>("--file")
                 {
-                    IsRequired = true
+                    Description = "The file that contains the definition of the workflow to create."
                 };
+                option.AddAlias("-f");
+                return option;
             }
         }
+
     }
+
 }

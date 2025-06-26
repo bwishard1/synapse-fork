@@ -24,6 +24,8 @@ services:
     image: ghcr.io/serverlessworkflow/synapse/operator:1.0.0-alpha5.14
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./secrets:/home/app/.synapse/secrets 
+      - ./secrets:/root/.synapse/secrets 
     environment:
       CONNECTIONSTRINGS__REDIS: garnet:6379
       SYNAPSE_OPERATOR_NAMESPACE: default

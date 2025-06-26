@@ -1,0 +1,30 @@
+{
+  "apiVersion": "core.synapse.dev/v1alpha1",
+  "kind": "Workflow",
+  "metadata": {
+    "name": "greeter",
+    "namespace": "default"
+  },
+  "spec": {
+    "versions": [
+      {
+        "name": "v1",
+        "document": {
+          "dsl": "1.0.0-alpha5",
+          "namespace": "default",
+          "name": "greeter",
+          "version": "0.1.0"
+        },
+        "do": [
+          {
+            "greet": {
+              "set": {
+                "greetings": "Hello World!"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

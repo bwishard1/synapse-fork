@@ -1,0 +1,8 @@
+document:
+  dsl: '1.0.0-alpha5'
+  name: minimal
+  namespace: default
+  version: '0.1.0'
+  do:
+    - set:
+        message: "Hello World"
